@@ -173,6 +173,13 @@ class YouTubeViewController: UIViewController {
             self?.webView.scrollView.refreshControl?.endRefreshing()
         }
     }
+
+    // MARK: - Background Audio
+
+    /// Called by SceneDelegate when app enters background
+    func evaluateBackgroundScript(_ script: String) {
+        webView?.evaluateJavaScript(script, completionHandler: nil)
+    }
 }
 
 
