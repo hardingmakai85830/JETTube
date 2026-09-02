@@ -223,9 +223,8 @@ extension YouTubeViewController: WKNavigationDelegate {
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Re-inject ad blocker after page load (safety net)
-        if let js = adBlockEngine.getPostLoadScript() {
-            webView.evaluateJavaScript(js, completionHandler: nil)
-        }
+        let js = adBlockEngine.getPostLoadScript()
+        webView.evaluateJavaScript(js, completionHandler: nil)
         
         // Inject script to hide "Use the app" banners
         let hideAppBanner = """
