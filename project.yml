@@ -3,7 +3,6 @@ options:
   bundleIdPrefix: com.jet
   deploymentTarget:
     iOS: "16.0"
-  xcodeVersion: "16.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
 
@@ -15,12 +14,16 @@ settings:
     CODE_SIGN_IDENTITY: ""
     CODE_SIGNING_REQUIRED: "NO"
     CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_STYLE: "Manual"
+    PROVISIONING_PROFILE_SPECIFIER: ""
     SWIFT_VERSION: "5.0"
+    ENABLE_BITCODE: "NO"
 
 targets:
   JETTube:
     type: application
     platform: iOS
+    deploymentTarget: "16.0"
     sources:
       - path: JETTube
         excludes:
@@ -30,10 +33,15 @@ targets:
         INFOPLIST_FILE: JETTube/App/Info.plist
         PRODUCT_BUNDLE_IDENTIFIER: com.jet.tube
         TARGETED_DEVICE_FAMILY: "1,2"
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        ENABLE_PREVIEWS: true
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGN_STYLE: "Manual"
+        DEVELOPMENT_TEAM: ""
+        PROVISIONING_PROFILE_SPECIFIER: ""
+        ENABLE_BITCODE: "NO"
     resources:
       - path: JETTube/AdBlocker/AdBlockerScript.js
       - path: JETTube/AdBlocker/AdBlockerCSS.css

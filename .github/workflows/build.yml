@@ -15,54 +15,60 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+
     - name: Install XcodeGen
       run: brew install xcodegen
 
     - name: Generate Xcode Project
       run: xcodegen generate
 
-    - name: List Schemes
+    - name: Show Schemes
       run: xcodebuild -project JETTube.xcodeproj -list
 
-    - name: Build App
+    # Step 1: Build for iphoneos — unsigned
+    - name: Build for Device (unsigned)
       run: |
-        xcodebuild \
+        xcodebuild build \
           -project JETTube.xcodeproj \
           -scheme JETTube \
-          -destination 'generic/platform=iOS' \
+          -sdk iphoneos \
           -configuration Release \
-          -derivedDataPath build/DerivedData \
-          CODE_SIGN_IDENTITY="-" \
+          -derivedDataPath DerivedData \
+          CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          AD_HOC_CODE_SIGNING_ALLOWED=YES \
           DEVELOPMENT_TEAM="" \
           PROVISIONING_PROFILE_SPECIFIER="" \
-          ENABLE_BITCODE=NO \
-          ONLY_ACTIVE_ARCH=NO \
-          build
+          | xcpretty || true
+        
+        # Verify build output
+        find DerivedData -name "*.app" -type d | head -5
 
+    # Step 2: Package into IPA
     - name: Create IPA
       run: |
-        APP_PATH=$(find build/DerivedData -name "JETTube.app" -type d | head -1)
-        echo "Found app at: $APP_PATH"
-        mkdir -p build/Payload
-        cp -r "$APP_PATH" build/Payload/
-        cd build
-        zip -r JETTube.ipa Payload
-        echo "✅ IPA created successfully!"
-        ls -la JETTube.ipa
+        # Find the built .app
+        APP_PATH=$(find DerivedData -name "JETTube.app" -path "*/Release-iphoneos/*" | head -1)
+        
+        if [ -z "$APP_PATH" ]; then
+          echo "❌ .app not found in Release-iphoneos, searching all..."
+          APP_PATH=$(find DerivedData -name "JETTube.app" -type d | head -1)
+        fi
+        
+        echo "📦 Building IPA from: $APP_PATH"
+        
+        mkdir -p Payload
+        cp -r "$APP_PATH" Payload/
+        zip -r JETTube.ipa Payload/
+        rm -rf Payload
+        
+        echo "✅ IPA size: $(du -sh JETTube.ipa | cut -f1)"
 
-    - name: Upload IPA Artifact
+    - name: Upload IPA
       uses: actions/upload-artifact@v4
       with:
-        name: JETTube-IPA
-        path: build/JETTube.ipa
+        name: JETTube-unsigned
+        path: JETTube.ipa
         retention-days: 90
-
-    - name: Create Release (on tag)
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v2
-      with:
-        files: build/JETTube.ipa
-        generate_release_notes: true
