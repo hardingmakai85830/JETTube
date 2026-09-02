@@ -5,22 +5,15 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest
-    
+    runs-on: macos-15
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
-    - name: Debug - List files
-      run: |
-        echo "=== Root ==="
-        ls -la
-        echo "=== project.yml ==="
-        cat project.yml | head -5
 
     - name: Install XcodeGen
       run: brew install xcodegen
@@ -28,24 +21,33 @@ jobs:
     - name: Generate Xcode Project
       run: xcodegen generate
 
+    - name: List Schemes
+      run: xcodebuild -project JETTube.xcodeproj -list
+
     - name: Build App
       run: |
         xcodebuild \
           -project JETTube.xcodeproj \
           -scheme JETTube \
-          -sdk iphoneos \
+          -destination 'generic/platform=iOS' \
           -configuration Release \
-          -archivePath build/JETTube.xcarchive \
-          archive \
-          CODE_SIGN_IDENTITY="" \
+          -derivedDataPath build/DerivedData \
+          CODE_SIGN_IDENTITY="-" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          DEVELOPMENT_TEAM=""
+          AD_HOC_CODE_SIGNING_ALLOWED=YES \
+          DEVELOPMENT_TEAM="" \
+          PROVISIONING_PROFILE_SPECIFIER="" \
+          ENABLE_BITCODE=NO \
+          ONLY_ACTIVE_ARCH=NO \
+          build
 
     - name: Create IPA
       run: |
+        APP_PATH=$(find build/DerivedData -name "JETTube.app" -type d | head -1)
+        echo "Found app at: $APP_PATH"
         mkdir -p build/Payload
-        cp -r build/JETTube.xcarchive/Products/Applications/JETTube.app build/Payload/
+        cp -r "$APP_PATH" build/Payload/
         cd build
         zip -r JETTube.ipa Payload
         echo "✅ IPA created successfully!"
