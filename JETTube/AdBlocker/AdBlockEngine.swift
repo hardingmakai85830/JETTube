@@ -5,16 +5,16 @@ import WebKit
 class AdBlockEngine {
 
     // MARK: - URL Patterns to Block
+    // ONLY external ad domains — do NOT block YouTube internal URLs
+    // as they may break video playback
     
     private let adURLPatterns: [String] = [
-        "/pagead/", "/ptracking", "/api/stats/ads", "/get_midroll_",
-        "googleads.", "/ad_data_", "doubleclick.net", "googleadservices.com",
-        "googlesyndication.com", "/api/stats/qoe?adformat",
-        "/api/stats/playback?adformat", "/api/stats/watchtime?adformat",
-        "/youtubei/v1/player/ad_break", "/pcs/activeview",
-        "/pagead/interaction", "fundingchoicesmessages.google.com",
-        "/youtubei/v1/att/get", "google.com/pagead",
-        "/set_awesome", "/api/stats/delayplay", "/api/stats/atr",
+        "doubleclick.net",
+        "googleadservices.com",
+        "googlesyndication.com",
+        "google.com/pagead",
+        "google.com/adsense",
+        "fundingchoicesmessages.google.com",
     ]
     
     // MARK: - URL Check (for navigation delegate)
@@ -31,28 +31,17 @@ class AdBlockEngine {
     // MARK: - WKContentRuleList (Native WebKit URL blocking)
     
     /// Compiles JSON rules into WKContentRuleList — blocks at WebKit level (fastest)
+    /// Only blocks external ad servers, NOT YouTube internal URLs
     func compileContentRules(completion: @escaping (WKContentRuleList?) -> Void) {
         let rules: [[String: Any]] = [
             makeBlockRule("*doubleclick.net*"),
             makeBlockRule("*googleadservices.com*"),
             makeBlockRule("*googlesyndication.com*"),
-            makeBlockRule("*youtube.com/api/stats/ads*"),
-            makeBlockRule("*youtube.com/pagead/*"),
-            makeBlockRule("*youtube.com/ptracking*"),
-            makeBlockRule("*youtube.com/get_midroll_*"),
-            makeBlockRule("*youtube.com/ad_data_*"),
-            makeBlockRule("*youtube.com/api/stats/delayplay*"),
-            makeBlockRule("*youtube.com/api/stats/atr*"),
-            makeBlockRule("*youtube.com/set_awesome*"),
-            makeBlockRule("*youtube.com/pcs/activeview*"),
-            makeBlockRule("*youtube.com/pagead/interaction*"),
-            makeBlockRule("*fundingchoicesmessages.google.com*"),
-            makeBlockRule("*youtube.com/youtubei/v1/att/get*"),
-            makeBlockRule("*youtube.com/youtubei/v1/player/ad_break*"),
-            makeBlockRule("*googleads.g.doubleclick.net*"),
-            makeBlockRule("*static.doubleclick.net*"),
             makeBlockRule("*google.com/pagead/*"),
             makeBlockRule("*google.com/adsense*"),
+            makeBlockRule("*fundingchoicesmessages.google.com*"),
+            makeBlockRule("*googleads.g.doubleclick.net*"),
+            makeBlockRule("*static.doubleclick.net*"),
         ]
         
         guard let jsonData = try? JSONSerialization.data(withJSONObject: rules),
