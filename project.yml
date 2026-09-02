@@ -1,0 +1,40 @@
+name: JETTube
+options:
+  bundleIdPrefix: com.jet
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  JETTube:
+    type: application
+    platform: iOS
+    sources:
+      - path: JETTube
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        INFOPLIST_FILE: JETTube/App/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.jet.tube
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: true
+    resources:
+      - path: JETTube/AdBlocker/AdBlockerScript.js
+      - path: JETTube/AdBlocker/AdBlockerCSS.css
+      - path: JETTube/Resources

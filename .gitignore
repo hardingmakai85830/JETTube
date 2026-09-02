@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+*.xcuserdata
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Build
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# IDE
+.idea/
+.vscode/
+
+# Metadata (Chrome extension)
+_metadata/

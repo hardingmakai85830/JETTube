@@ -1,0 +1,79 @@
+/* JET Tube — Ad Blocker CSS */
+
+/* Video ads */
+.video-ads,
+.ytp-ad-module,
+.ytp-ad-overlay-container,
+.ytp-ad-text-overlay,
+.ytp-ad-overlay-slot,
+.ytp-ad-player-overlay,
+.ytp-ad-player-overlay-layout,
+.ytp-ad-player-overlay-instream-info,
+.ytp-ad-action-interstitial,
+.ytp-ad-action-interstitial-background-container,
+.ytp-ad-image-overlay,
+.ytp-ad-survey-interstitial,
+.ytp-ad-feedback-dialog-container,
+.ytp-ad-overlay-ad-info-button-container,
+.ytp-ad-badge,
+.ytp-ad-visit-advertiser-button,
+.ytp-ad-preview-container,
+.ytp-ad-persistent-progress-bar-container,
+.ytp-ad-skip-ad-slot,
+.ytp-ad-message-slot,
+.ytp-ad-overlay-close-container,
+.ytp-ad-progress-list {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Page ads */
+#player-ads,
+#masthead-ad,
+ytd-promoted-sparkles-web-renderer,
+ytd-promoted-sparkles-text-search-renderer,
+ytd-display-ad-renderer,
+ytd-in-feed-ad-layout-renderer,
+ytd-ad-slot-renderer,
+ytd-banner-promo-renderer,
+ytd-statement-banner-renderer,
+ytd-mealbar-promo-renderer,
+ytd-action-companion-ad-renderer,
+ytd-companion-slot-renderer,
+ytd-promoted-video-renderer,
+ytd-search-pyv-renderer,
+ytd-background-promo-renderer,
+.ytd-merch-shelf-renderer,
+#offer-module {
+  display: none !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Mobile-specific ads */
+.ytm-promoted-sparkles-web-renderer,
+.ytm-companion-ad-renderer,
+ytm-promoted-sparkles-web-renderer,
+ytm-companion-slot,
+ytm-banner-promo-renderer,
+.ad-showing .ytp-ad-module {
+  display: none !important;
+}
+
+/* Anti-adblock popup */
+ytd-enforcement-message-view-model,
+tp-yt-iron-overlay-backdrop[opened] {
+  display: none !important;
+}
+
+/* "Use the YouTube app" banner */
+.mobile-topbar-header-sign-in-button,
+ytm-banner-promo-renderer,
+.ytm-autonav-bar,
+[class*="companion-ad"] {
+  display: none !important;
+}
