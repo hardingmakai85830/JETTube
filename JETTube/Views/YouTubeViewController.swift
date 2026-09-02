@@ -175,6 +175,22 @@ class YouTubeViewController: UIViewController {
             if (player) {
                 obs.observe(player, { attributes: true, attributeFilter: ['class'] });
             }
+            
+            // --- Background Audio: Override visibility API ---
+            // Trick YouTube into thinking page is always visible
+            // so it won't pause video when app goes to background
+            Object.defineProperty(document, 'hidden', {
+                get: function() { return false; },
+                configurable: true
+            });
+            Object.defineProperty(document, 'visibilityState', {
+                get: function() { return 'visible'; },
+                configurable: true
+            });
+            // Block visibilitychange event from reaching YouTube's listener
+            document.addEventListener('visibilitychange', function(e) {
+                e.stopImmediatePropagation();
+            }, true);
         })();
         """
         webView.evaluateJavaScript(adBlockScript, completionHandler: nil)
