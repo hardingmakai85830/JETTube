@@ -15,12 +15,18 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Debug - List files
+      run: |
+        echo "=== Root ==="
+        ls -la
+        echo "=== project.yml ==="
+        cat project.yml | head -5
+
     - name: Install XcodeGen
       run: brew install xcodegen
 
     - name: Generate Xcode Project
       run: xcodegen generate
-      working-directory: JETTube
 
     - name: Build App
       run: |
@@ -35,7 +41,6 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           DEVELOPMENT_TEAM=""
-      working-directory: JETTube
 
     - name: Create IPA
       run: |
@@ -45,18 +50,17 @@ jobs:
         zip -r JETTube.ipa Payload
         echo "✅ IPA created successfully!"
         ls -la JETTube.ipa
-      working-directory: JETTube
 
     - name: Upload IPA Artifact
       uses: actions/upload-artifact@v4
       with:
         name: JETTube-IPA
-        path: JETTube/build/JETTube.ipa
+        path: build/JETTube.ipa
         retention-days: 90
 
     - name: Create Release (on tag)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: JETTube/build/JETTube.ipa
+        files: build/JETTube.ipa
         generate_release_notes: true
