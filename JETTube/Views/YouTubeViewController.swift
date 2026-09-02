@@ -31,10 +31,16 @@ class YouTubeViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        webView.frame = view.bounds
+        let top = view.safeAreaInsets.top
+        webView.frame = CGRect(
+            x: 0,
+            y: top,
+            width: view.bounds.width,
+            height: view.bounds.height - top
+        )
         progressView.frame = CGRect(
             x: 0,
-            y: view.safeAreaInsets.top,
+            y: top,
             width: view.bounds.width,
             height: 2
         )
@@ -107,7 +113,7 @@ class YouTubeViewController: UIViewController {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         webView.isOpaque = false
         webView.backgroundColor = UIColor(red: 0.04, green: 0.04, blue: 0.06, alpha: 1)
         webView.scrollView.backgroundColor = UIColor(red: 0.04, green: 0.04, blue: 0.06, alpha: 1)
@@ -266,5 +272,21 @@ extension YouTubeViewController: WKUIDelegate {
             webView.load(URLRequest(url: url))
         }
         return nil
+    }
+
+    // MARK: - Microphone Permission (Voice Search)
+    func webView(
+        _ webView: WKWebView,
+        requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+        initiatedByFrame frame: WKFrameInfo,
+        type: WKMediaCaptureType,
+        decisionHandler: @escaping (WKPermissionDecision) -> Void
+    ) {
+        // Auto-grant microphone for YouTube voice search
+        if origin.host.contains("youtube.com") || origin.host.contains("google.com") {
+            decisionHandler(.grant)
+        } else {
+            decisionHandler(.deny)
+        }
     }
 }
