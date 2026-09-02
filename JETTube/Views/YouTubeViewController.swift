@@ -56,12 +56,10 @@ class YouTubeViewController: UIViewController {
     private func setupWebView() {
         let config = WKWebViewConfiguration()
         
-        // Allow inline media playback (required for YouTube)
+        // Essential: Allow inline media playback for YouTube
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         config.allowsPictureInPictureMediaPlayback = true
-        
-        // Allow AirPlay
         config.allowsAirPlayForMediaPlayback = true
         
         // Preferences
@@ -70,45 +68,79 @@ class YouTubeViewController: UIViewController {
         config.defaultWebpagePreferences = prefs
         
         // ============================================================
-        // AD BLOCKER JS INJECTION — runs at document-start
-        // Same technique as Chrome extension's inject.js (MAIN world)
+        // AD BLOCKER — Only CSS hiding + skip script
+        // NO fetch/XHR/Response interception to avoid breaking playback
+        // Injected AFTER document loads (atDocumentEnd), not at start
         // ============================================================
         
-        if let jsScript = adBlockEngine.getAdBlockerScript() {
-            let userScript = WKUserScript(
-                source: jsScript,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
-            )
-            config.userContentController.addUserScript(userScript)
-        }
+        // CSS ad hiding — safe, does not affect playback
+        let cssScript = """
+        (function() {
+            var s = document.createElement('style');
+            s.textContent = `
+                .video-ads, .ytp-ad-module, .ytp-ad-overlay-container,
+                .ytp-ad-text-overlay, .ytp-ad-overlay-slot, .ytp-ad-image-overlay,
+                .ytp-ad-player-overlay, .ytp-ad-action-interstitial,
+                .ytp-ad-preview-container, .ytp-ad-skip-ad-slot,
+                .ytp-ad-message-slot, .ytp-ad-badge,
+                #player-ads, #masthead-ad,
+                ytd-promoted-sparkles-web-renderer, ytd-ad-slot-renderer,
+                ytd-in-feed-ad-layout-renderer, ytd-banner-promo-renderer,
+                ytd-display-ad-renderer, ytd-companion-slot-renderer,
+                ytm-promoted-sparkles-web-renderer, ytm-companion-slot,
+                .ytm-promoted-sparkles-web-renderer, .ytm-companion-ad-renderer {
+                    display: none !important;
+                    height: 0 !important;
+                    opacity: 0 !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(s);
+        })();
+        """
+        let cssUserScript = WKUserScript(
+            source: cssScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        )
+        config.userContentController.addUserScript(cssUserScript)
         
-        // CSS injection — hide ad elements instantly
-        if let cssScript = adBlockEngine.getAdBlockerCSS() {
-            let cssInjection = WKUserScript(
-                source: cssScript,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
-            )
-            config.userContentController.addUserScript(cssInjection)
-        }
-        
-        // ============================================================
-        // NATIVE URL BLOCKING — WKContentRuleList
-        // Faster than JS fetch override — blocks at WebKit level
-        // ============================================================
-        
-        adBlockEngine.compileContentRules { ruleList in
-            if let ruleList = ruleList {
-                config.userContentController.add(ruleList)
+        // Ad skip script — runs periodically to catch and skip video ads
+        let skipScript = """
+        (function() {
+            function skipAd() {
+                var p = document.querySelector('.html5-video-player');
+                if (p && (p.classList.contains('ad-showing') || p.classList.contains('ad-interrupting'))) {
+                    var v = p.querySelector('video');
+                    if (v && v.duration && isFinite(v.duration)) {
+                        v.currentTime = v.duration;
+                    }
+                    // Click all skip buttons
+                    document.querySelectorAll('.ytp-skip-ad-button,.ytp-ad-skip-button,.ytp-ad-skip-button-modern,[id^="skip-button"]').forEach(function(b) {
+                        try { b.click(); } catch(e) {}
+                    });
+                }
+                // Remove page ad elements
+                document.querySelectorAll('#player-ads,#masthead-ad,ytd-ad-slot-renderer,ytm-promoted-sparkles-web-renderer,ytm-companion-slot').forEach(function(el) {
+                    el.remove();
+                });
             }
-        }
+            setInterval(skipAd, 500);
+        })();
+        """
+        let skipUserScript = WKUserScript(
+            source: skipScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        )
+        config.userContentController.addUserScript(skipUserScript)
         
-        // Mobile YouTube user agent (triggers mobile site)
-        let mobileUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        config.applicationNameForUserAgent = mobileUA
+        // ============================================================
+        // DO NOT add WKContentRuleList — it can block resources
+        // needed for video playback (e.g., googlevideo.com CDN init)
+        // ============================================================
         
-        // Create WebView
+        // Create WebView — use default user agent (DO NOT override)
+        // Overriding UA can trigger YouTube's WebView detection
         webView = WKWebView(frame: view.bounds, configuration: config)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -117,9 +149,6 @@ class YouTubeViewController: UIViewController {
         webView.isOpaque = false
         webView.backgroundColor = UIColor(red: 0.04, green: 0.04, blue: 0.06, alpha: 1)
         webView.scrollView.backgroundColor = UIColor(red: 0.04, green: 0.04, blue: 0.06, alpha: 1)
-        
-        // Custom user agent to avoid "Use the app" nag
-        webView.customUserAgent = mobileUA
         
         view.addSubview(webView)
         
@@ -158,22 +187,6 @@ class YouTubeViewController: UIViewController {
         }
     }
 
-    // MARK: - Pull to Refresh
-    
-    private func setupRefreshControl() {
-        let refreshControl = UIRefreshControl()
-        refreshControl.tintColor = .white
-        refreshControl.addTarget(self, action: #selector(refreshPage), for: .valueChanged)
-        webView.scrollView.refreshControl = refreshControl
-    }
-    
-    @objc private func refreshPage() {
-        webView.reload()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            self?.webView.scrollView.refreshControl?.endRefreshing()
-        }
-    }
-
     // MARK: - Background Audio
 
     /// Called by SceneDelegate when app enters background
@@ -199,14 +212,7 @@ extension YouTubeViewController: WKNavigationDelegate {
         
         let urlString = url.absoluteString
         
-        // Block known ad URLs at navigation level
-        if adBlockEngine.shouldBlockURL(urlString) {
-            decisionHandler(.cancel)
-            incrementBlockCount()
-            return
-        }
-        
-        // Block "Open in YouTube app" redirects
+        // Block "Open in YouTube app" redirects ONLY
         if urlString.contains("redirect_to_app") ||
            urlString.contains("intent://") ||
            urlString.hasPrefix("youtube://") ||
@@ -215,15 +221,15 @@ extension YouTubeViewController: WKNavigationDelegate {
             return
         }
         
-        // Handle external links (non-YouTube)
+        // Handle external links (non-YouTube) — open in Safari
         if !urlString.contains("youtube.com") &&
            !urlString.contains("youtu.be") &&
            !urlString.contains("google.com") &&
            !urlString.contains("googleapis.com") &&
            !urlString.contains("gstatic.com") &&
            !urlString.contains("googlevideo.com") &&
-           !urlString.contains("ggpht.com") {
-            // Open in Safari
+           !urlString.contains("ggpht.com") &&
+           !urlString.contains("ytimg.com") {
             if navigationAction.navigationType == .linkActivated {
                 UIApplication.shared.open(url)
                 decisionHandler(.cancel)
@@ -235,11 +241,7 @@ extension YouTubeViewController: WKNavigationDelegate {
     }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Re-inject ad blocker after page load (safety net)
-        let js = adBlockEngine.getPostLoadScript()
-        webView.evaluateJavaScript(js, completionHandler: nil)
-        
-        // Inject script to hide "Use the app" banners
+        // Hide "Use the app" banners
         let hideAppBanner = """
         (function() {
             var style = document.createElement('style');
@@ -255,11 +257,6 @@ extension YouTubeViewController: WKNavigationDelegate {
         })();
         """
         webView.evaluateJavaScript(hideAppBanner, completionHandler: nil)
-    }
-    
-    private func incrementBlockCount() {
-        let current = UserDefaults.standard.integer(forKey: Constants.Defaults.adsBlocked)
-        UserDefaults.standard.set(current + 1, forKey: Constants.Defaults.adsBlocked)
     }
 }
 
