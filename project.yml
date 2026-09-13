@@ -42,7 +42,11 @@ targets:
         DEVELOPMENT_TEAM: ""
         PROVISIONING_PROFILE_SPECIFIER: ""
         ENABLE_BITCODE: "NO"
+        CODE_SIGN_ENTITLEMENTS: JETTube/App/JETTube.entitlements
     resources:
       - path: JETTube/AdBlocker/AdBlockerScript.js
       - path: JETTube/AdBlocker/AdBlockerCSS.css
       - path: JETTube/Resources
+    dependencies:
+      - framework: CarPlay.framework
+        embed: false

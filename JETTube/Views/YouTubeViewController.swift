@@ -1,6 +1,7 @@
 import UIKit
 import WebKit
 import AVKit
+import MediaPlayer
 
 class YouTubeViewController: UIViewController {
 
@@ -10,6 +11,7 @@ class YouTubeViewController: UIViewController {
     private var webView: WKWebView!
     private var progressView: UIProgressView!
     private var progressObserver: NSKeyValueObservation?
+    private var urlObserver: NSKeyValueObservation?
     
     // PiP
     private var pipController: AVPictureInPictureController?
@@ -23,6 +25,7 @@ class YouTubeViewController: UIViewController {
         
         setupWebView()
         setupProgressBar()
+        setupNowPlaying()
         loadURL(initialURL)
     }
 
@@ -46,6 +49,7 @@ class YouTubeViewController: UIViewController {
     deinit {
         progressObserver?.invalidate()
         pipPossibleObserver?.invalidate()
+        urlObserver?.invalidate()
     }
 
     // MARK: - WebView Setup
@@ -63,11 +67,9 @@ class YouTubeViewController: UIViewController {
         prefs.allowsContentJavaScript = true
         config.defaultWebpagePreferences = prefs
         
-        // ============================================================
         // IMPORTANT: Do NOT inject any scripts at page load
         // YouTube's player must initialize without interference
         // Ad blocker is injected AFTER page fully loads (see didFinish)
-        // ============================================================
         
         webView = WKWebView(frame: view.bounds, configuration: config)
         webView.navigationDelegate = self
@@ -84,6 +86,15 @@ class YouTubeViewController: UIViewController {
         progressObserver = webView.observe(\.estimatedProgress, options: .new) { [weak self] webView, _ in
             self?.progressView.progress = Float(webView.estimatedProgress)
             self?.progressView.isHidden = webView.estimatedProgress >= 1.0
+        }
+        
+        // URL observer — detect video page vs home page for tab bar visibility
+        urlObserver = webView.observe(\.url, options: .new) { [weak self] webView, _ in
+            guard let self = self, let url = webView.url?.absoluteString else { return }
+            let isVideoPage = url.contains("/watch?v=") || url.contains("/watch?") || url.contains("/shorts/")
+            DispatchQueue.main.async {
+                self.tabBarController?.tabBar.isHidden = isVideoPage
+            }
         }
     }
 
@@ -112,14 +123,19 @@ class YouTubeViewController: UIViewController {
         }
     }
 
-    // MARK: - Ad Blocker Injection (delayed, safe)
+    // MARK: - Ad Blocker + Auto-Continue + Background Audio (delayed injection)
     
-    /// Inject ad blocker ONLY after page fully loads
+    /// Inject all scripts ONLY after page fully loads
     /// Waits 2 seconds after didFinish to ensure YouTube player is ready
-    private func injectAdBlocker() {
-        let adBlockScript = """
+    private func injectAllScripts() {
+        let script = """
         (function() {
-            // --- CSS: Hide ad UI elements ---
+            if (window._jetTubeInjected) return;
+            window._jetTubeInjected = true;
+            
+            // ============================================================
+            // 1. CSS: Hide ad UI elements
+            // ============================================================
             var s = document.createElement('style');
             s.textContent = `
                 .video-ads, .ytp-ad-module, .ytp-ad-overlay-container,
@@ -141,7 +157,9 @@ class YouTubeViewController: UIViewController {
             `;
             document.head.appendChild(s);
             
-            // --- Skip video ads instantly ---
+            // ============================================================
+            // 2. Skip video ads instantly
+            // ============================================================
             function skipAd() {
                 var p = document.querySelector('.html5-video-player');
                 if (!p) return;
@@ -156,29 +174,71 @@ class YouTubeViewController: UIViewController {
                 }
             }
             
-            // --- Remove page ad elements ---
+            // ============================================================
+            // 3. Remove page ad elements
+            // ============================================================
             function removeAds() {
                 document.querySelectorAll('#player-ads,#masthead-ad,ytd-ad-slot-renderer,ytd-in-feed-ad-layout-renderer,ytm-promoted-sparkles-web-renderer,ytm-companion-slot').forEach(function(el) {
                     el.remove();
                 });
             }
             
-            // Run every 500ms
-            setInterval(function() {
-                skipAd();
-                removeAds();
-            }, 500);
-            
-            // Watch for ad-showing class
-            var obs = new MutationObserver(function() { skipAd(); });
-            var player = document.querySelector('.html5-video-player');
-            if (player) {
-                obs.observe(player, { attributes: true, attributeFilter: ['class'] });
+            // ============================================================
+            // 4. AUTO-DISMISS "Are you still watching?" popup
+            // YouTube shows this after ~30min of inactivity
+            // ============================================================
+            function dismissStillWatching() {
+                // Desktop popup
+                document.querySelectorAll('yt-confirm-dialog-renderer').forEach(function(dialog) {
+                    var btn = dialog.querySelector('#confirm-button button, a.yt-simple-endpoint, tp-yt-paper-button#confirm-button');
+                    if (btn) { btn.click(); return; }
+                });
+                
+                // Mobile popup
+                document.querySelectorAll('ytm-popup-container, ytm-upsell-dialog-renderer').forEach(function(popup) {
+                    var btn = popup.querySelector('button, .dialog-confirm-button, [class*="confirm"]');
+                    if (btn) { btn.click(); return; }
+                });
+                
+                // Generic: look for any popup with "still watching" / "continue watching" text
+                document.querySelectorAll('tp-yt-paper-dialog, ytd-popup-container, [role="dialog"]').forEach(function(popup) {
+                    var text = (popup.textContent || '').toLowerCase();
+                    if (text.includes('still watching') || text.includes('continue watching') || 
+                        text.includes('video has been paused') || text.includes('bạn vẫn đang xem') ||
+                        text.includes('tiếp tục xem') || text.includes('muốn nghe tiếp')) {
+                        // Find and click the confirm/yes button
+                        var buttons = popup.querySelectorAll('button, a[role="button"], tp-yt-paper-button, ytm-button-renderer button');
+                        for (var i = 0; i < buttons.length; i++) {
+                            var btnText = (buttons[i].textContent || '').toLowerCase();
+                            if (btnText.includes('yes') || btnText.includes('ok') || btnText.includes('có') || 
+                                btnText.includes('continue') || btnText.includes('tiếp') || btnText.includes('confirm') ||
+                                btnText.includes('dismiss')) {
+                                buttons[i].click();
+                                break;
+                            }
+                        }
+                        // If no text match, click first button as fallback
+                        if (buttons.length > 0 && !popup.classList.contains('_jet_dismissed')) {
+                            popup.classList.add('_jet_dismissed');
+                            buttons[0].click();
+                        }
+                    }
+                });
+                
+                // Also: if video is paused and no user interaction, auto-resume
+                var v = document.querySelector('video');
+                if (v && v.paused && v.src && !v.ended && v.readyState > 2) {
+                    // Check if pause is from YouTube popup, not user
+                    var popup = document.querySelector('yt-confirm-dialog-renderer, [role="dialog"]');
+                    if (popup) {
+                        v.play().catch(function(){});
+                    }
+                }
             }
             
-            // --- Background Audio: Override visibility API ---
-            // Trick YouTube into thinking page is always visible
-            // so it won't pause video when app goes to background
+            // ============================================================
+            // 5. Background Audio: Override visibility API
+            // ============================================================
             Object.defineProperty(document, 'hidden', {
                 get: function() { return false; },
                 configurable: true
@@ -187,13 +247,124 @@ class YouTubeViewController: UIViewController {
                 get: function() { return 'visible'; },
                 configurable: true
             });
-            // Block visibilitychange event from reaching YouTube's listener
             document.addEventListener('visibilitychange', function(e) {
                 e.stopImmediatePropagation();
             }, true);
+            
+            // ============================================================
+            // 6. Main loop — runs every 500ms
+            // ============================================================
+            setInterval(function() {
+                skipAd();
+                removeAds();
+                dismissStillWatching();
+            }, 500);
+            
+            // Watch for ad-showing class changes
+            var obs = new MutationObserver(function() { skipAd(); });
+            var player = document.querySelector('.html5-video-player');
+            if (player) {
+                obs.observe(player, { attributes: true, attributeFilter: ['class'] });
+            }
         })();
         """
-        webView.evaluateJavaScript(adBlockScript, completionHandler: nil)
+        webView.evaluateJavaScript(script, completionHandler: nil)
+    }
+
+    // MARK: - Now Playing (Lock Screen Controls)
+    
+    private func setupNowPlaying() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+        
+        // Play
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.playCommand.addTarget { [weak self] _ in
+            self?.webView?.evaluateJavaScript("document.querySelector('video')?.play()") { _, _ in }
+            return .success
+        }
+        
+        // Pause
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.pauseCommand.addTarget { [weak self] _ in
+            self?.webView?.evaluateJavaScript("document.querySelector('video')?.pause()") { _, _ in }
+            return .success
+        }
+        
+        // Toggle play/pause
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+            self?.webView?.evaluateJavaScript("""
+                (function() {
+                    var v = document.querySelector('video');
+                    if (v) { v.paused ? v.play() : v.pause(); }
+                })();
+            """) { _, _ in }
+            return .success
+        }
+        
+        // Skip forward 10s
+        commandCenter.skipForwardCommand.isEnabled = true
+        commandCenter.skipForwardCommand.preferredIntervals = [10]
+        commandCenter.skipForwardCommand.addTarget { [weak self] _ in
+            self?.webView?.evaluateJavaScript("var v=document.querySelector('video'); if(v) v.currentTime+=10;") { _, _ in }
+            return .success
+        }
+        
+        // Skip backward 10s
+        commandCenter.skipBackwardCommand.isEnabled = true
+        commandCenter.skipBackwardCommand.preferredIntervals = [10]
+        commandCenter.skipBackwardCommand.addTarget { [weak self] _ in
+            self?.webView?.evaluateJavaScript("var v=document.querySelector('video'); if(v) v.currentTime-=10;") { _, _ in }
+            return .success
+        }
+    }
+    
+    /// Update Now Playing info from current video
+    private func updateNowPlayingInfo() {
+        let js = """
+        (function() {
+            var v = document.querySelector('video');
+            var title = '';
+            // Try different selectors for video title
+            var titleEl = document.querySelector('.slim-video-information-title, .ytm-slim-video-information-renderer .title, h1.title, [class*="title"] yt-formatted-string');
+            if (titleEl) title = titleEl.textContent.trim();
+            if (!title) title = document.title.replace(' - YouTube', '').trim();
+            
+            var channel = '';
+            var channelEl = document.querySelector('.slim-owner-channel-name, .ytm-slim-owner-renderer .channel-name, #channel-name a, ytd-channel-name a');
+            if (channelEl) channel = channelEl.textContent.trim();
+            
+            return JSON.stringify({
+                title: title,
+                channel: channel,
+                duration: v ? v.duration : 0,
+                currentTime: v ? v.currentTime : 0,
+                paused: v ? v.paused : true
+            });
+        })();
+        """
+        
+        webView?.evaluateJavaScript(js) { [weak self] result, error in
+            guard let jsonString = result as? String,
+                  let data = jsonString.data(using: .utf8),
+                  let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            
+            let title = info["title"] as? String ?? "JET Tube"
+            let channel = info["channel"] as? String ?? ""
+            let duration = info["duration"] as? Double ?? 0
+            let currentTime = info["currentTime"] as? Double ?? 0
+            let paused = info["paused"] as? Bool ?? true
+            
+            var nowPlayingInfo: [String: Any] = [
+                MPMediaItemPropertyTitle: title,
+                MPMediaItemPropertyArtist: channel,
+                MPMediaItemPropertyPlaybackDuration: duration,
+                MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
+                MPNowPlayingInfoPropertyPlaybackRate: paused ? 0.0 : 1.0
+            ]
+            
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        }
     }
 
     // MARK: - Background Audio
@@ -244,15 +415,33 @@ extension YouTubeViewController: WKNavigationDelegate {
             }
         }
         
-        // Allow everything else — DO NOT block any YouTube/Google URLs
+        // Allow everything else
         decisionHandler(.allow)
     }
     
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Wait 2 seconds for YouTube player to fully initialize
-        // THEN inject ad blocker — safe, won't break playback
+        // THEN inject all scripts — safe, won't break playback
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            self?.injectAdBlocker()
+            self?.injectAllScripts()
+        }
+        
+        // Update now playing info periodically
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.updateNowPlayingInfo()
+            // Keep updating every 5 seconds
+            self?.startNowPlayingTimer()
+        }
+    }
+    
+    private func startNowPlayingTimer() {
+        // Update now playing info every 5 seconds
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            self.updateNowPlayingInfo()
         }
     }
 }
